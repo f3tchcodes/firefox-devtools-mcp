@@ -87,6 +87,7 @@ export interface FirefoxLaunchOptions {
   acceptInsecureCerts?: boolean | undefined;
   connectExisting?: boolean | undefined;
   marionettePort?: number | undefined;
+  resolvedMarionettePort?: number | undefined;
   /** Lookup the Marionette port from Firefox's AI assistant companion instead of using marionettePort */
   lookupMarionettePort?: boolean | undefined;
   env?: Record<string, string> | undefined;

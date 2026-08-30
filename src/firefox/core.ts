@@ -167,6 +167,7 @@ export class FirefoxCore {
   async connect(): Promise<void> {
     const isAndroid = this.options.androidDevice !== undefined;
     const androidPackage = this.options.androidPackage ?? 'org.mozilla.firefox';
+    let resolvedMarionettePort: number | undefined;
 
     if (isAndroid && !this.options.androidWipeAppData) {
       // geckodriver runs "adb shell pm clear <package>" before every Android session
@@ -217,12 +218,13 @@ export class FirefoxCore {
       const serviceBuilder = new firefox.ServiceBuilder(geckodriverPath);
       this.driver = firefox.Driver.createSession(caps, serviceBuilder.build());
     } else if (this.options.connectExisting) {
-      let port = this.options.marionettePort ?? 2828;
-      if (this.options.lookupMarionettePort) {
+      let port = this.options.resolvedMarionettePort ?? this.options.marionettePort ?? 2828;
+      if (this.options.lookupMarionettePort && this.options.resolvedMarionettePort === undefined) {
         logDebug('Looking up Marionette port');
         const lookedUpPort = lookupMarionettePort();
         if (lookedUpPort !== undefined) {
           port = lookedUpPort;
+          resolvedMarionettePort = lookedUpPort;
         } else {
           throw new Error(
             'Marionette port not found: please enable Firefox remote control for AI tooling using the AI assistant companion button.'
@@ -402,6 +404,13 @@ export class FirefoxCore {
     // Remember current window handle (browsing context)
     this.currentContextId = await this.driver.getWindowHandle();
     logDebug(`Browsing context ID: ${this.currentContextId}`);
+
+    if (resolvedMarionettePort !== undefined) {
+      this.options = {
+        ...this.options,
+        resolvedMarionettePort,
+      };
+    }
 
     // Navigate if startUrl provided (skip for connectExisting to not disrupt the user's browsing)
     if (this.options.startUrl && !this.options.connectExisting) {
