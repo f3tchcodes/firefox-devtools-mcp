@@ -5,7 +5,8 @@
 import type { FirefoxLaunchOptions, ConsoleMessage, LogpointResult } from './types.js';
 import type { Browser, BrowsingContext, Network, Script } from 'webdriver-bidi-protocol';
 import { FirefoxCore } from './core.js';
-import { BiDiFacade } from './bidi.js';
+import { BiDiFacade, type FirefoxExtension } from './bidi.js';
+import { listExtensions, type ListExtensionsFilters } from './webextension.js';
 import { logDebug } from '../utils/logger.js';
 import { ConsoleEvents, NetworkEvents, DebuggingEvents, DownloadEvents } from './events/index.js';
 import type { NetworkBodyResult } from './events/network.js';
@@ -439,6 +440,14 @@ export class FirefoxClient {
 
   async printPage(options: { landscape?: boolean; background?: boolean } = {}): Promise<string> {
     return await this.getDom().printPage(this.getContext(), options);
+  }
+
+  // ============================================================================
+  // WebExtensions
+  // ============================================================================
+
+  async listExtensions(filters?: ListExtensionsFilters): Promise<FirefoxExtension[]> {
+    return await listExtensions(this.getBidi(), filters);
   }
 
   // ============================================================================

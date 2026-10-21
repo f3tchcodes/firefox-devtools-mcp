@@ -2,11 +2,7 @@
  * WebExtension tools for MCP
  * Tools for installing, managing and inspecting Firefox extensions
  *
- * install/uninstall: Uses Firefox's native WebDriver BiDi webExtension module
- * list_extensions: Uses chrome-privileged AddonManager API as workaround for
- *                  missing webExtension.getExtensions BiDi command
- *
- * Note: list_extensions requires MOZ_REMOTE_ALLOW_SYSTEM_ACCESS=1
+ * install/uninstall/list: Uses Firefox's native WebDriver BiDi webExtension module
  */
 
 import type { WebExtension } from 'webdriver-bidi-protocol';
@@ -14,10 +10,23 @@ import type { FirefoxCommands } from '../firefox/bidi.js';
 import { successResponse } from '../utils/response-helpers.js';
 import { defineModule, defineToolHandler, type ToolDefinition } from './module.js';
 import type { McpToolResponse } from '../types/common.js';
+import type { FirefoxDevTools } from '../firefox/index.js';
+import { compareVersions } from '../utils/version.js';
 
 // ============================================================================
 // Tool: install_extension
 // ============================================================================
+
+const MIN_FIREFOX_VERSION = '158.0';
+
+function checkListExtensionsSupported(firefox: FirefoxDevTools): void {
+  const version = firefox.getFirefoxVersion();
+  if (version !== null && compareVersions(version, MIN_FIREFOX_VERSION) < 0) {
+    throw new Error(
+      `Listing extensions requires Firefox ${MIN_FIREFOX_VERSION.split('.')[0]} or later (connected: ${version})`
+    );
+  }
+}
 
 export const installExtensionTool = {
   name: 'install_extension',
@@ -147,10 +156,7 @@ export const handleUninstallExtension = defineToolHandler(
 export const listExtensionsTool = {
   name: 'list_extensions',
   description:
-    // MOZ_REMOTE_ALLOW_SYSTEM_ACCESS is required because the tool relies on the
-    // privileged AddonManager API as a workaround for the currently missing
-    // webExtension.getExtensions WebDriver BiDi command.
-    'List installed Firefox extensions with UUIDs and background scripts. Requires MOZ_REMOTE_ALLOW_SYSTEM_ACCESS=1 env var.',
+    'List installed Firefox extensions using the WebDriver BiDi webExtension.moz:listExtensions command.',
   annotations: {
     readOnlyHint: true,
   },
@@ -169,11 +175,6 @@ export const listExtensionsTool = {
       isActive: {
         type: 'boolean',
         description: 'Optional: Filter by enabled (true) or disabled (false) status',
-      },
-      isSystem: {
-        type: 'boolean',
-        description:
-          'Optional: Filter by system/built-in (true) or user-installed (false) extensions',
       },
     },
   },
@@ -226,133 +227,60 @@ function formatExtensionList(extensions: ExtensionInfo[], filterId?: string): st
 
 export const handleListExtensions = defineToolHandler(
   async (args: unknown): Promise<McpToolResponse> => {
-    try {
-      const { ids, name, isActive, isSystem } =
-        (args as {
-          ids?: string[];
-          name?: string;
-          isActive?: boolean;
-          isSystem?: boolean;
-        }) || {};
+    // Check whether Firefox version is supported
+    const { getFirefox } = await import('../index.js');
+    const firefox = await getFirefox();
+    checkListExtensionsSupported(firefox);
 
-      const { getFirefox } = await import('../index.js');
-      const firefox = await getFirefox();
+    // Handle listing extensions
+    const { ids, name, isActive } =
+      (args as {
+        ids?: string[];
+        name?: string;
+        isActive?: boolean;
+      }) || {};
 
-      // Get privileged ("chrome") contexts
-      const result = await firefox.sendBiDiCommand('browsingContext.getTree', {
-        'moz:scope': 'chrome',
-      });
+    const matched = await firefox.listExtensions({ ids, name, isActive });
 
-      const contexts = result.contexts || [];
-      if (contexts.length === 0) {
-        throw new Error(
-          'No privileged contexts available. Ensure MOZ_REMOTE_ALLOW_SYSTEM_ACCESS=1 is set.'
-        );
-      }
+    const extensions = matched.map((extension): ExtensionInfo => {
+      const policy = extension.policy;
+      return {
+        id: extension.id,
+        name: extension.name,
+        version: extension.version,
+        isActive: extension.isActive,
+        isSystem: extension.isSystem,
+        uuid:
+          policy === undefined
+            ? '`uuid` omitted due to restricted system access.'
+            : (policy?.uuid ?? 'Unavailable (e.g. disabled extension)'),
+        baseURL:
+          policy === undefined
+            ? '`baseURL` omitted due to restricted system access.'
+            : (policy?.baseURL ?? 'Unavailable (e.g. disabled extension)'),
+        backgroundScripts: policy?.backgroundScripts ?? [],
+        manifestVersion: extension.manifestVersion,
+      };
+    });
 
-      const driver = firefox.getDriver();
-      const chromeContextId = contexts[0]!.context;
-      const originalContextId = firefox.getCurrentContextId();
+    const filterDescription = [
+      ids && ids.length > 0 ? `ids: [${ids.join(', ')}]` : null,
+      name ? `name: "${name}"` : null,
+      typeof isActive === 'boolean' ? `active: ${isActive}` : null,
+    ]
+      .filter(Boolean)
+      .join(', ');
 
-      try {
-        // Switch to chrome context
-        await driver.switchTo().window(chromeContextId);
-        await driver.setContext('chrome');
-
-        // Execute chrome-privileged script to get extensions
-        // Use executeAsyncScript for async operations
-        const filterParams = { ids, name, isActive, isSystem };
-        const script = `
-        const callback = arguments[arguments.length - 1];
-        const filter = ${JSON.stringify(filterParams)};
-        (async () => {
-          try {
-            const { AddonManager } = ChromeUtils.importESModule("resource://gre/modules/AddonManager.sys.mjs");
-            let addons = await AddonManager.getAllAddons();
-
-            // Filter to only extensions (not themes, plugins, etc.)
-            addons = addons.filter(addon => addon.type === "extension");
-
-            // Apply filters
-            if (filter.ids && filter.ids.length > 0) {
-              addons = addons.filter(addon => filter.ids.includes(addon.id));
-            }
-            if (filter.name) {
-              const search = filter.name.toLowerCase();
-              addons = addons.filter(addon => addon.name.toLowerCase().includes(search));
-            }
-            if (typeof filter.isActive === 'boolean') {
-              addons = addons.filter(addon => addon.isActive === filter.isActive);
-            }
-            if (typeof filter.isSystem === 'boolean') {
-              addons = addons.filter(addon => addon.isSystem === filter.isSystem);
-            }
-
-            const extensions = [];
-            for (const addon of addons) {
-              const policy = WebExtensionPolicy.getByID(addon.id);
-              if (!policy) continue; // Skip if no policy (addon not loaded)
-
-              extensions.push({
-                id: addon.id,
-                name: addon.name,
-                version: addon.version,
-                isActive: addon.isActive,
-                isSystem: addon.isSystem,
-                uuid: policy.mozExtensionHostname,
-                baseURL: policy.baseURL,
-                backgroundScripts: policy.extension?.backgroundScripts || [],
-                manifestVersion: policy.extension?.manifest?.manifest_version || null
-              });
-            }
-
-            callback(extensions);
-          } catch (error) {
-            callback([]);
-          }
-        })();
-      `;
-
-        const extensions = (await driver.executeAsyncScript(script)) as ExtensionInfo[];
-
-        // Build filter description for output
-        const filterDesc = [
-          ids && ids.length > 0 ? `ids: [${ids.join(', ')}]` : null,
-          name ? `name: "${name}"` : null,
-          typeof isActive === 'boolean' ? `active: ${isActive}` : null,
-          typeof isSystem === 'boolean' ? `system: ${isSystem}` : null,
-        ]
-          .filter(Boolean)
-          .join(', ');
-
-        return successResponse(formatExtensionList(extensions, filterDesc || undefined));
-      } finally {
-        // Restore previous context (skip if already on the right chrome context)
-        try {
-          if (originalContextId && originalContextId !== chromeContextId) {
-            await driver.setContext('content');
-            await driver.switchTo().window(originalContextId);
-          }
-        } catch {
-          // Ignore errors restoring context
-        }
-      }
-    } catch (error) {
-      if (error instanceof Error && error.message.includes('UnsupportedOperationError')) {
-        throw new Error(
-          'Chrome context access not enabled. Set MOZ_REMOTE_ALLOW_SYSTEM_ACCESS=1 environment variable and restart Firefox.'
-        );
-      }
-      throw error;
-    }
+    return successResponse(formatExtensionList(extensions, filterDescription || undefined));
   }
 );
 
 export const module = defineModule({
   name: 'webextension',
-  description: 'Install and uninstall web extensions.',
+  description: 'Install, uninstall, and list web extensions.',
   tools: [
     [installExtensionTool, handleInstallExtension],
     [uninstallExtensionTool, handleUninstallExtension],
+    [listExtensionsTool, handleListExtensions],
   ],
 });
