@@ -9,9 +9,10 @@
  * extension/privileged contexts.
  */
 
-import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, beforeEach } from 'vitest';
 import { createTestFirefox, closeFirefox, waitFor } from '../../helpers/firefox.js';
 import type { FirefoxClient } from '@/firefox/index.js';
+import { compareVersions } from '@/utils/version.js';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
@@ -89,6 +90,7 @@ describe('BiDi Navigation Integration Tests', () => {
   let firefox: FirefoxClient;
   let extensionUrl: string;
   let extensionId: string;
+  let listExtensionsSupported = false;
 
   beforeAll(async () => {
     packExtension();
@@ -110,6 +112,10 @@ describe('BiDi Navigation Integration Tests', () => {
     // Resolve the moz-extension:// URL from the extension hostname
     const hostname = await getExtensionHostname(firefox, extensionId);
     extensionUrl = `moz-extension://${hostname}/popup.html`;
+
+    // webExtension.moz:listExtensions needs Firefox 158
+    const version = firefox.getFirefoxVersion();
+    listExtensionsSupported = version !== null && compareVersions(version, '158.0') >= 0;
   });
 
   afterAll(async () => {
@@ -186,4 +192,74 @@ describe('BiDi Navigation Integration Tests', () => {
       // Best-effort cleanup
     }
   }, 15000);
+
+  describe('listExtensions', () => {
+    beforeEach((ctx) => {
+      if (!listExtensionsSupported) {
+        console.warn('Skipping listExtensions tests: requires Firefox 158 or later');
+        ctx.skip();
+      }
+    });
+
+    it('returns the installed extension with its policy data', async () => {
+      const extensions = await firefox.listExtensions({ ids: [extensionId] });
+
+      expect(extensions).toHaveLength(1);
+      const extension = extensions[0];
+      expect(extension.id).toBe(extensionId);
+      expect(extension.name).toBe('MCP Test Extension');
+      expect(extension.version).toBe('1.0');
+      expect(extension.manifestVersion).toBe(2);
+      expect(extension.isActive).toBe(true);
+      expect(extension.isSystem).toBe(false);
+      expect(extension.policy?.uuid).toBeTruthy();
+      expect(extension.policy?.baseURL).toBeTruthy();
+      expect(extension.policy?.backgroundScripts).toEqual([]);
+    }, 15000);
+
+    it('filters by exact id', async () => {
+      const known = await firefox.listExtensions({
+        ids: [extensionId, 'nonexistent-mcp-test@example.invalid'],
+      });
+      expect(known).toHaveLength(1);
+      expect(known[0].id).toBe(extensionId);
+
+      const unknown = await firefox.listExtensions({
+        ids: ['nonexistent-mcp-test@example.invalid'],
+      });
+      expect(unknown).toHaveLength(0);
+    }, 15000);
+
+    it('filters by partial name, case-insensitively', async () => {
+      const byName = await firefox.listExtensions({ name: 'mcp test exte' });
+      expect(byName.map((extension) => extension.id)).toContain(extensionId);
+
+      const mismatch = await firefox.listExtensions({ ids: [extensionId], name: 'no-such-name' });
+      expect(mismatch).toHaveLength(0);
+    }, 15000);
+
+    it('filters by active status', async () => {
+      const active = await firefox.listExtensions({ ids: [extensionId], isActive: true });
+      expect(active).toHaveLength(1);
+
+      const inactive = await firefox.listExtensions({ ids: [extensionId], isActive: false });
+      expect(inactive).toHaveLength(0);
+    }, 15000);
+
+    it('applies all filters together', async () => {
+      const match = await firefox.listExtensions({
+        ids: [extensionId],
+        name: 'MCP',
+        isActive: true,
+      });
+      expect(match).toHaveLength(1);
+
+      const mismatch = await firefox.listExtensions({
+        ids: [extensionId],
+        name: 'MCP',
+        isActive: false,
+      });
+      expect(mismatch).toHaveLength(0);
+    }, 15000);
+  });
 });

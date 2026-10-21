@@ -28,6 +28,28 @@ type FirefoxEventMap = {
 };
 type FirefoxEventName = keyof FirefoxEventMap;
 
+/**
+ * A non-hidden WebExtension as returned by webExtension.moz:listExtensions.
+ * policy and sourceURL are only present when the Remote Agent has system access.
+ */
+export type FirefoxExtension = {
+  id: string;
+  name: string;
+  version: string;
+  manifestVersion: number;
+  isActive: boolean;
+  isSystem: boolean;
+  hidden: boolean;
+  temporarilyInstalled: boolean;
+  sourceURL?: string | null;
+  policy?: {
+    uuid: string;
+    baseURL: string;
+    extensionURL: string;
+    backgroundScripts: string[];
+  } | null;
+};
+
 export type FirefoxCommands = Commands & {
   // Firefox-specific extensions to standard commands
   'browsingContext.getTree': {
@@ -35,6 +57,10 @@ export type FirefoxCommands = Commands & {
   };
   'webExtension.install': {
     params: { 'moz:permanent'?: boolean };
+  };
+  'webExtension.moz:listExtensions': {
+    params: EmptyParams;
+    returnType: { extensions: FirefoxExtension[] };
   };
   // Firefox-specific commands
   'moz:debugging.setDebuggerEnabled': {
