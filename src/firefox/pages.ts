@@ -48,6 +48,8 @@ export function isReadinessState(value: unknown): value is BrowsingContext.Readi
 }
 
 export class PageManagement {
+  private resizedContexts = new Set<string>();
+
   constructor(
     private driver: WebDriver,
     private getCurrentContextId: () => string | null,
@@ -109,7 +111,30 @@ export class PageManagement {
       throw new Error(`Cannot set viewport: no browsing context ID`);
     }
 
+    this.resizedContexts.add(contextId);
     await this.setViewport(contextId, { width, height });
+  }
+
+  /**
+   * Remove the viewport overrides set by setViewportSize. Firefox keeps them
+   * after the session ends, so a Firefox that outlives the session would stay
+   * at the fixed size.
+   */
+  async resetViewports(): Promise<void> {
+    const contexts = [...this.resizedContexts];
+    this.resizedContexts.clear();
+    await Promise.all(
+      contexts.map(async (contextId) => {
+        try {
+          await this.setViewport(contextId, null);
+        } catch (error) {
+          // Closed tabs lose their override anyway
+          logDebug(
+            `Failed to reset viewport of ${contextId}: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      })
+    );
   }
 
   private async setViewport(
