@@ -7,13 +7,13 @@
 npm run test:run
 
 # Run only unit tests (fast, no Firefox needed)
-npx vitest run tests/tools tests/firefox tests/utils tests/snapshot tests/cli tests/config tests/smoke.test.ts
+npm run test:unit
 
 # Run only integration tests (launches real Firefox in headless mode)
-npx vitest run tests/integration
+npm run test:integration
 
 # Run the e2e scenario suite
-npx vitest run tests/integration/e2e-scenario.integration.test.ts
+npx vitest run tests/integration/firefox/e2e-scenario.test.ts
 
 # Watch mode (re-runs on file changes)
 npm test
@@ -21,7 +21,7 @@ npm test
 
 ## E2E scenario tests
 
-The file `tests/integration/e2e-scenario.integration.test.ts` contains end-to-end
+The file `tests/integration/firefox/e2e-scenario.test.ts` contains end-to-end
 tests that exercise the full `FirefoxClient` API against a realistic multi-page
 web application (`tests/fixtures/e2e-app.html`).
 

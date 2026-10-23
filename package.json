@@ -37,7 +37,8 @@
     "inspector:dev": "NODE_ENV=development npx @modelcontextprotocol/inspector npx tsx src/index.moz.ts",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:unit": "vitest run --exclude 'tests/integration/**'",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest watch",
     "test:ui": "vitest --ui"
