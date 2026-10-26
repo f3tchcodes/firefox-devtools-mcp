@@ -124,12 +124,12 @@ export class FirefoxClient {
       driver,
       () => this.core.getCurrentContextId(),
       (id: string) => this.core.setCurrentContextId(id),
-      (method, params) => this.getBidi().sendCommand(method, params)
+      (method, params, options) => this.getBidi().sendCommand(method, params, options)
     );
 
     this.cache = new CacheManagement(
       () => this.core.getCurrentContextId(),
-      (method, params) => this.getBidi().sendCommand(method, params)
+      (method, params, options) => this.getBidi().sendCommand(method, params, options)
     );
   }
 
@@ -449,8 +449,8 @@ export class FirefoxClient {
    * Send raw BiDi command (for advanced operations)
    * @internal
    */
-  sendBiDiCommand: BiDiFacade['sendCommand'] = (method, params) =>
-    this.getBidi().sendCommand(method, params);
+  sendBiDiCommand: BiDiFacade['sendCommand'] = (method, params, options) =>
+    this.getBidi().sendCommand(method, params, options);
 
   /**
    * Get WebDriver instance (for advanced operations)

@@ -25,6 +25,16 @@ export class FirefoxDisconnectedError extends Error {
 }
 
 /**
+ * Error thrown when a BiDi command gets no response within its timeout
+ */
+export class BiDiTimeoutError extends Error {
+  constructor(method: string) {
+    super(`BiDi command timeout: ${method}`);
+    this.name = 'BiDiTimeoutError';
+  }
+}
+
+/**
  * Check if an error indicates Firefox disconnection
  */
 export function isDisconnectionError(error: unknown): boolean {

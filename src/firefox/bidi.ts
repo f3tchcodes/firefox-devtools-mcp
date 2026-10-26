@@ -10,6 +10,7 @@ import type {
   Script,
 } from 'webdriver-bidi-protocol';
 import { logDebug } from '../utils/logger.js';
+import { BiDiTimeoutError } from '../utils/errors.js';
 import { remoteValueToNative } from '../utils/remote-value.js';
 
 // Firefox-specific events
@@ -111,7 +112,8 @@ export class BiDiFacade extends EventEmitter<FirefoxEventMap> {
 
   async sendCommand<T extends keyof FirefoxCommands>(
     method: T,
-    params: FirefoxCommands[T]['params'] = {}
+    params: FirefoxCommands[T]['params'] = {},
+    { timeout = 10000 }: { timeout?: number } = {}
   ): Promise<FirefoxCommands[T]['returnType']> {
     const bidi = await this.driver.getBidi();
     // bidi.socket is a Node.js `ws` WebSocket (EventEmitter-style), but typed as browser WebSocket
@@ -123,10 +125,16 @@ export class BiDiFacade extends EventEmitter<FirefoxEventMap> {
     const id = this.nextCommandId++;
 
     return new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        ws.off('message', messageHandler);
+        reject(new BiDiTimeoutError(method));
+      }, timeout);
+
       const messageHandler = (data: any) => {
         try {
           const payload = JSON.parse(data.toString());
           if (payload.id === id) {
+            clearTimeout(timeoutId);
             ws.off('message', messageHandler);
             if (payload.error) {
               const details = payload.message ? `: ${payload.message}` : '';
@@ -149,11 +157,6 @@ export class BiDiFacade extends EventEmitter<FirefoxEventMap> {
       };
 
       ws.send(JSON.stringify(command));
-
-      setTimeout(() => {
-        ws.off('message', messageHandler);
-        reject(new Error(`BiDi command timeout: ${method}`));
-      }, 10000);
     });
   }
 
