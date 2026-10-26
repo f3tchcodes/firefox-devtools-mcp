@@ -6,7 +6,7 @@
  * Uncommon schemes (moz-extension:, about:, etc.) use wait:"none"
  */
 
-import { afterEach, describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { ReadinessState } from '@/firefox/bidi.js';
 import {
   isCommonScheme,
@@ -85,49 +85,6 @@ describe('PageManagement', () => {
     );
     return { pages, sendBiDiCommand };
   }
-
-  describe('tab titles', () => {
-    afterEach(() => {
-      vi.useRealTimers();
-    });
-
-    it('gives up on a tab whose title does not come back in time', async () => {
-      vi.useFakeTimers();
-      const driver = {
-        getAllWindowHandles: vi.fn().mockResolvedValue(['tab-1', 'tab-2']),
-        getWindowHandle: vi.fn().mockResolvedValue('tab-1'),
-      } as any;
-      const sendBiDiCommand = vi.fn((method: string, params: any) => {
-        if (method === 'browsingContext.getTree') {
-          return Promise.resolve({
-            contexts: [
-              { context: 'tab-1', url: 'https://example.com/a' },
-              { context: 'tab-2', url: 'https://example.com/b' },
-            ],
-          });
-        }
-        if (params.target.context === 'tab-2') {
-          return new Promise(() => {});
-        }
-        return Promise.resolve({ type: 'success', result: { type: 'string', value: 'A' } });
-      });
-      const pages = new PageManagement(
-        driver,
-        vi.fn().mockReturnValue('tab-1'),
-        vi.fn(),
-        sendBiDiCommand as any
-      );
-
-      const refresh = pages.refreshTabs();
-      await vi.advanceTimersByTimeAsync(1000);
-      await refresh;
-
-      expect(pages.getTabs()).toEqual([
-        { actor: 'tab-1', title: 'A', url: 'https://example.com/a' },
-        { actor: 'tab-2', title: '(unknown)', url: 'https://example.com/b' },
-      ]);
-    });
-  });
 
   describe('navigate', () => {
     it('uses BiDi with wait:interactive for common URL schemes', async () => {

@@ -170,3 +170,41 @@ describe('Tab Management Integration Tests', () => {
     expect(selectedIdx).toBeGreaterThanOrEqual(0);
   }, 10000);
 });
+
+describe('Tab titles with a busy tab', () => {
+  let firefox: FirefoxClient;
+
+  beforeAll(async () => {
+    firefox = await createTestFirefox();
+  });
+
+  afterAll(async () => {
+    await closeFirefox(firefox);
+  });
+
+  it('should not wait for the title of a tab whose content process is busy', async () => {
+    const fixturePath = fixtureUrl('simple.html');
+    await firefox.navigate(fixturePath);
+
+    const busyUrl = 'data:text/html,<title>Busy</title>';
+    await firefox.createNewPage(busyUrl);
+    // Not awaited: the title read below queues behind this loop in the content process
+    void firefox
+      .sendBiDiCommand('script.evaluate', {
+        expression: 'const end = Date.now() + 5000; while (Date.now() < end) {}',
+        awaitPromise: false,
+        target: { context: firefox.getCurrentContextId()! },
+      })
+      .catch(() => {});
+
+    const start = Date.now();
+    await firefox.refreshTabs();
+    const elapsed = Date.now() - start;
+
+    expect(firefox.getTabs()).toEqual([
+      { actor: expect.any(String), title: 'Simple Test Page', url: fixturePath },
+      { actor: expect.any(String), title: '(unknown)', url: busyUrl },
+    ]);
+    expect(elapsed).toBeLessThan(3000);
+  }, 20000);
+});

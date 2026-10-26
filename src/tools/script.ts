@@ -9,6 +9,7 @@ import { validateFunction } from '../utils/js-validation.js';
 import { saveOutput } from '../utils/save-output.js';
 import { defineModule, defineToolHandler, type ToolDefinition } from './module.js';
 import type { McpToolResponse } from '../types/common.js';
+import { BiDiTimeoutError } from '../utils/errors.js';
 
 export const evaluateScriptTool = {
   name: 'evaluate_script',
@@ -64,7 +65,6 @@ export const evaluateScriptTool = {
 
 // Constants
 const DEFAULT_TIMEOUT = 5000; // 5 seconds
-const TIMEOUT = Symbol('Timeout');
 
 export const handleEvaluateScript = defineToolHandler(
   async (args: unknown): Promise<McpToolResponse> => {
@@ -124,32 +124,35 @@ export const handleEvaluateScript = defineToolHandler(
     if (!context) {
       throw new Error('No active browsing context');
     }
-    const callFunctionPromise = firefox.sendBiDiCommand('script.callFunction', {
-      functionDeclaration: fnString,
-      awaitPromise: true,
-      arguments: resolvedArgs,
-      target: {
-        context,
-        ...(sandbox !== undefined && { sandbox }),
-      },
-    });
-
-    // Race against timeout as WebDriver BiDi callFunction has no built-in
-    // timeout feature.
-    const result = await Promise.race([
-      new Promise<typeof TIMEOUT>((r) => setTimeout(() => r(TIMEOUT), scriptTimeout)),
-      callFunctionPromise,
-    ]);
-
-    if (result === TIMEOUT) {
-      return errorResponse(
-        new Error(
-          `Script execution timed out (exceeded ${scriptTimeout}ms).\n\n` +
-            'The function may contain an infinite loop or be waiting for a slow operation.\n' +
-            'Try simplifying the script or increasing the timeout parameter.'
-        )
+    let result;
+    try {
+      result = await firefox.sendBiDiCommand(
+        'script.callFunction',
+        {
+          functionDeclaration: fnString,
+          awaitPromise: true,
+          arguments: resolvedArgs,
+          target: {
+            context,
+            ...(sandbox !== undefined && { sandbox }),
+          },
+        },
+        { timeout: scriptTimeout }
       );
-    } else if (result.type === 'success') {
+    } catch (error) {
+      if (error instanceof BiDiTimeoutError) {
+        return errorResponse(
+          new Error(
+            `Script execution timed out (exceeded ${scriptTimeout}ms).\n\n` +
+              'The function may contain an infinite loop or be waiting for a slow operation.\n' +
+              'Try simplifying the script or increasing the timeout parameter.'
+          )
+        );
+      }
+      throw error;
+    }
+
+    if (result.type === 'success') {
       // JSON.stringify returns undefined for an undefined script result
       const json = JSON.stringify(remoteValueToNative(result.result), null, 2) ?? 'undefined';
 

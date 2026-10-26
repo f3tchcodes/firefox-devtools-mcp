@@ -247,18 +247,16 @@ export class PageManagement {
   }
 
   private async getTitle(context: string): Promise<string> {
-    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const result = await Promise.race([
-        this.sendBiDiCommand('script.evaluate', {
+      const result = await this.sendBiDiCommand(
+        'script.evaluate',
+        {
           expression: 'document.title',
           awaitPromise: false,
           target: { context, sandbox: PAGES_SANDBOX },
-        }),
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error('Timed out')), TITLE_TIMEOUT_MS);
-        }),
-      ]);
+        },
+        { timeout: TITLE_TIMEOUT_MS }
+      );
       if (result.type === 'success' && result.result.type === 'string') {
         return result.result.value || 'Untitled';
       }
@@ -268,8 +266,6 @@ export class PageManagement {
         `Failed to fetch title of tab ${context}: ${error instanceof Error ? error.message : String(error)}`
       );
       return '(unknown)';
-    } finally {
-      clearTimeout(timer);
     }
   }
 
