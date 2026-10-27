@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { createTestFirefox, closeFirefox, fixtureUrl, waitFor } from '../helpers/firefox.js';
+import { createTestFirefox, closeFirefox, fixtureUrl, waitFor } from '../../helpers/firefox.js';
 import { ReadinessState } from '@/firefox/bidi.js';
 import type { FirefoxClient } from '@/firefox/index.js';
 
