@@ -72,7 +72,6 @@ describe('Connect Existing Viewport Tests', () => {
       findFirefoxBinary(),
       [
         '-headless',
-        '-no-remote',
         '-profile',
         profile,
         '--marionette',
