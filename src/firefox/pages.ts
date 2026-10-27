@@ -7,6 +7,7 @@ import { WebDriver } from 'selenium-webdriver';
 import type { BrowsingContext, Script } from 'webdriver-bidi-protocol';
 import { ReadinessState, type BiDiFacade } from './bidi.js';
 import { log, logDebug } from '../utils/logger.js';
+import { BiDiTimeoutError } from '../utils/errors.js';
 
 const COMMON_URL_SCHEMES = ['http:', 'https:', 'data:', 'blob:', 'file:'];
 const PAGES_SANDBOX = 'page-management';
@@ -141,25 +142,20 @@ export class PageManagement {
     contextId: string,
     viewport: BrowsingContext.SetViewportParameters['viewport']
   ): Promise<void> {
-    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      await Promise.race([
-        this.sendBiDiCommand('browsingContext.setViewport', { context: contextId, viewport }),
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(
-            () =>
-              reject(
-                new Error(
-                  `Firefox did not confirm the new viewport size within ${VIEWPORT_TIMEOUT_MS}ms. ` +
-                    'The viewport was probably resized, but Firefox cannot confirm it when the page is zoomed.'
-                )
-              ),
-            VIEWPORT_TIMEOUT_MS
-          );
-        }),
-      ]);
-    } finally {
-      clearTimeout(timer);
+      await this.sendBiDiCommand(
+        'browsingContext.setViewport',
+        { context: contextId, viewport },
+        { timeout: VIEWPORT_TIMEOUT_MS }
+      );
+    } catch (error) {
+      if (error instanceof BiDiTimeoutError) {
+        throw new Error(
+          `Firefox did not confirm the new viewport size within ${VIEWPORT_TIMEOUT_MS}ms. ` +
+            'The viewport was probably resized, but Firefox cannot confirm it when the page is zoomed.'
+        );
+      }
+      throw error;
     }
   }
 
