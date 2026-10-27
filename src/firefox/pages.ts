@@ -394,25 +394,20 @@ export class PageManagement {
   /**
    * Evaluate an expression and return its primitive value, or null when the
    * evaluation fails or does not answer within HISTORY_EVALUATE_TIMEOUT_MS.
-   * Bug 2084899: Replace with a timeout option on sendCommand.
    */
   async #evaluateWithTimeout(target: Script.ContextTarget, expression: string): Promise<unknown> {
-    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const result = await Promise.race([
-        this.sendBiDiCommand('script.evaluate', { expression, awaitPromise: false, target }),
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error('Timed out')), HISTORY_EVALUATE_TIMEOUT_MS);
-        }),
-      ]);
+      const result = await this.sendBiDiCommand(
+        'script.evaluate',
+        { expression, awaitPromise: false, target },
+        { timeout: HISTORY_EVALUATE_TIMEOUT_MS }
+      );
       if (result.type === 'success' && 'value' in result.result) {
         return result.result.value;
       }
       return null;
     } catch {
       return null;
-    } finally {
-      clearTimeout(timer);
     }
   }
 }
