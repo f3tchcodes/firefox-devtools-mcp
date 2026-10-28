@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.7] - 2026-10-28
+
+### Added
+- `--idle-timeout` option (`IDLE_TIMEOUT`) to set how many seconds a `--connect-existing` session waits without tool calls before it releases Firefox. The default stays 1800 seconds (30 minutes). Firefox accepts one client at a time, so a shorter delay lets other clients connect sooner
+
+### Fixed
+- `--connect-existing` now fails at once with a clear error when another WebDriver session already holds Firefox, instead of failing after about 60 seconds with "unknown error"
+- `--connect-existing` now gives up after 45 seconds when Firefox asks the user to allow the remote control session and nobody answers, instead of hanging forever. The error points at the prompt
+- Shutting down the server while Firefox waits for the user to allow the session no longer leaves geckodriver running
+- `set_viewport_size` now only changes the viewport of the selected tab, as its description says, instead of resizing the whole window. With `--connect-existing`, the tabs it resized are reset when the session closes
+- `evaluate_script` with a `timeout` above 10 seconds no longer stops after 10 seconds with a generic BiDi timeout error
+- `upload_file_by_uid` works again. Since 0.10.5 it did not set any file. It now uses WebDriver BiDi `input.setFiles`, and no longer changes the style of a hidden file input to make it visible
+
+### Changed
+- `navigate_history` now uses WebDriver BiDi instead of WebDriver Classic
+- BiDi command errors now include the message sent by Firefox
+- The README explains how to run a `--connect-existing` Firefox in a dedicated profile, next to your everyday Firefox
+
 ## [0.10.6] - 2026-10-16
 
 ### Added
