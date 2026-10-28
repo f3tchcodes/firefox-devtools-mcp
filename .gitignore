@@ -151,7 +151,9 @@ package.moz.json
 .vscode/
 .idea/
 *.sublime-*
-.claude/
+!.claude/
+.claude/*
+!.claude/skills/
 
 # OS
 .DS_Store
