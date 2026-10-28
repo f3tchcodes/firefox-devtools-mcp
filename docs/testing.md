@@ -97,6 +97,13 @@ npx vitest run tests/integration/firefox/e2e-scenario.test.ts
 npm test
 ```
 
+Integration tests launch the Firefox that the server finds by default. To test
+another Firefox, set `FIREFOX_PATH` to its binary:
+
+```bash
+FIREFOX_PATH=/path/to/firefox npm run test:integration
+```
+
 ## E2E scenario tests
 
 The file `tests/integration/firefox/e2e-scenario.test.ts` contains end-to-end

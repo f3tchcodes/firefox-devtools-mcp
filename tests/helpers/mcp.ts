@@ -31,9 +31,19 @@ export interface McpTestServer {
  */
 export async function startMcpServer(serverArgs: string[] = []): Promise<McpTestServer> {
   const home = mkdtempSync(join(tmpdir(), 'mcp-test-home-'));
+  const firefoxPathArgs = process.env.FIREFOX_PATH
+    ? ['--firefox-path', process.env.FIREFOX_PATH]
+    : [];
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: ['--import', 'tsx', join(repoRoot, 'src/index.moz.ts'), '--headless', ...serverArgs],
+    args: [
+      '--import',
+      'tsx',
+      join(repoRoot, 'src/index.moz.ts'),
+      '--headless',
+      ...firefoxPathArgs,
+      ...serverArgs,
+    ],
     cwd: repoRoot,
     env: {
       ...(process.env as Record<string, string>),

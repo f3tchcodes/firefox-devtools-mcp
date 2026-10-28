@@ -18,6 +18,7 @@ export async function createTestFirefox(
 ): Promise<FirefoxClient> {
   const defaultOptions: FirefoxLaunchOptions = {
     headless: true,
+    firefoxPath: process.env.FIREFOX_PATH || undefined,
     ...options,
   };
 
